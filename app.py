@@ -8,9 +8,9 @@ import tempfile
 # Load the model once with caching
 @st.cache_resource
 def load_model():
-    return tf.keras.models.load_model("model")
+    return tf.keras.models.load_model("model/new_model.h5")
 
-model = load_model()
+model = load_model(model/new_model.h5)
 
 st.title("Deepfake Face Detection")
 
