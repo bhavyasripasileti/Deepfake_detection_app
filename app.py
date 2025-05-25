@@ -10,7 +10,7 @@ import tempfile
 def load_model():
     return tf.keras.models.load_model("model/new_model.h5")
 
-model = load_model('model/new_model.h5')
+models = load_model('model/new_model.h5')
 
 st.title("Deepfake Face Detection")
 
