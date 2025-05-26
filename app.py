@@ -15,7 +15,8 @@ def extract_frames_from_video(video_path):
         ret, frame = cap.read()
         if not ret:
             break
-        frame = cv2.resize(frame, (224, 224)) / 255.0  # Resize and normalize frames
+        # Resize and normalize frames
+        frame = cv2.resize(frame, (224, 224)) / 255.0  
         frames.append(frame)
     
     cap.release()
@@ -56,9 +57,14 @@ def main():
                 # Prepare the input for the model
                 frames_input = np.expand_dims(frames, axis=0)  # Adjust input shape based on model requirement
 
+                # Assuming the model requires a second input; for example, this can be a metadata or sequence length
+                # Here I'm using a placeholder for the second input, adapt accordingly
+                additional_input = np.array([frames.shape[0]])  # Example, replace with your actual second input data
+                additional_input = np.expand_dims(additional_input, axis=0)  # Make it batch shape compatible
+
                 # Placeholder for model prediction
-                prediction = model.predict(frames_input)  # Adjust this based on your model architecture
-                st.write("Fake" if prediction[0][0] > 0.5 else "Real")  # Example condition based on prediction
+                prediction = model.predict([frames_input, additional_input])  # Change to pass both inputs
+                st.write("Fake" if prediction[0][0] > 0.5 else "Real")  # Example condition based on model prediction
 
         elif uploaded_file.name.endswith(('.jpg', '.jpeg', '.png')):
             image = Image.open(uploaded_file)
@@ -67,11 +73,11 @@ def main():
             img_array = preprocess_image(image)
             img_array = np.expand_dims(img_array, axis=0)  # Prepare the image for model input
             
-            # Load the model for image prediction
+            # Load the specific model for image prediction
             model = load_model("model/new_model.h5")  # Ensure this model is present in your "model" directory
             
             # Placeholder for model prediction
-            prediction = model.predict(img_array)  # Adjust this based on your model architecture
+            prediction = model.predict(img_array)  # This assumes model for images only requires a single input
             st.write("Fake" if prediction[0][0] > 0.5 else "Real")  # Example condition based on prediction
 
         # Clean up the temporary file after processing
