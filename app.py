@@ -64,7 +64,7 @@ def main():
                 
                 features = np.expand_dims(features, axis=0)  # Shape will become (1, 20, 2048)
 
-                # Context input should have a shape compatible with the model, assumed to be (1, 20)
+                # Context input for video (dummy data or actual context)
                 context_input_shape = 20  # The expected shape for context input as per the model
                 context_input = np.random.random((1, context_input_shape))  # Random context input of shape (1, 20)
 
@@ -85,8 +85,11 @@ def main():
             # Load the specific model for image prediction
             model = load_model("model/new_model.h5")  # Assuming this model is present for image predictions
             
-            # Placeholder for model prediction
-            prediction = model.predict(img_array)  # This assumes model for images only requires a single input
+            # Create dummy context input for image prediction
+            context_input = np.random.random((1, 20))  # Create placeholder context input
+
+            # Ensure model can handle two inputs
+            prediction = model.predict([img_array, context_input])  # Using a list for the 2 inputs
             st.write("Fake" if prediction[0][0] > 0.5 else "Real")
 
         # Clean up the temporary file after processing
