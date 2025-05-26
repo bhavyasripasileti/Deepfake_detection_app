@@ -20,8 +20,7 @@ def preprocess_image(image):
     """Resize and normalize the image."""
     image = image.resize((128, 128))  # Resize to the required input shape
     img_array = np.array(image) / 255.0
-    # Expand dimensions to match the shape (1, 128, 128, 3)
-    return np.expand_dims(img_array, axis=0)
+    return np.expand_dims(img_array, axis=0)  # Expand dims to (1, 128, 128, 3)
 
 def extract_frames_from_video(video_path, max_frames=30):
     """Extract frames from a video file."""
@@ -36,8 +35,7 @@ def extract_frames_from_video(video_path, max_frames=30):
         if not ret:
             break
         if count % interval == 0:
-            frame = cv2.resize(frame, (128, 128))
-            frame = frame / 255.0
+            frame = cv2.resize(frame, (128, 128)) / 255.0  # Normalize and resize
             frames.append(frame)
         count += 1
 
@@ -61,7 +59,7 @@ if uploaded_file:
                 prediction = model.predict(frames_input)
                 st.write("Fake" if prediction[0][0] > 0.5 else "Real")
             except Exception as e:
-                st.error(f"Error during prediction: {e}")  # Catch and display errors
+                st.error(f"Error during prediction: {e}")
 
     else:
         # Handle image upload
@@ -69,7 +67,7 @@ if uploaded_file:
         st.image(image, caption="Uploaded Image", use_column_width=True)
         
         img_array = preprocess_image(image)
-        
+
         # Debugging output for image shape
         st.write(f"Image array shape: {img_array.shape}")  
 
@@ -77,4 +75,4 @@ if uploaded_file:
             prediction = model.predict(img_array)
             st.write("Fake" if prediction[0][0] > 0.5 else "Real")
         except Exception as e:
-            st.error(f"Error during prediction: {e}")  # Catch and display errors
+            st.error(f"Error during prediction: {e}")
