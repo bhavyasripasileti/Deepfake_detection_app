@@ -6,7 +6,16 @@ import cv2
 import tempfile
 import os
 
-# Function to extract frames from the video
+# Function to preprocess image
+def preprocess_image(image):
+    """Resize and normalize the image."""
+    image = image.resize((128, 128))  # Resize to the required input shape
+    img_array = np.array(image) / 255.0
+    if img_array.shape[-1] == 4:  # If it has an alpha channel
+        img_array = img_array[..., :3]  # Use only RGB channels
+    return np.expand_dims(img_array, axis=0)  # Expand dims to (1, 128, 128, 3)
+
+# Function to extract frames from a video
 def extract_frames_from_video(video_path, max_frames=30):
     """Extract frames from a video file."""
     cap = cv2.VideoCapture(video_path)
@@ -21,52 +30,43 @@ def extract_frames_from_video(video_path, max_frames=30):
             break
         if count % interval == 0:
             frame = cv2.resize(frame, (128, 128)) / 255.0  # Normalize and resize
-            if frame.shape[-1] == 4:  # If it has an alpha channel
-                frame = frame[..., :3]  # Use only RGB channels
+            if frame.shape[-1] == 4:
+                frame = frame[..., :3]
             frames.append(frame)
         count += 1
 
     cap.release()
     return np.array(frames)
 
-# Function to preprocess a single image
-def preprocess_image(image):
-    """Resize and normalize the image."""
-    image = image.resize((128, 128))  # Resize to the required input shape
-    img_array = np.array(image) / 255.0  # Normalize to [0, 1]
-    if img_array.shape[-1] == 4:  # If it has an alpha channel
-        img_array = img_array[..., :3]  # Use only RGB channels
-    return np.expand_dims(img_array, axis=0)  # Expand dims to (1, 128, 128, 3)
-
-# Function to load model given a filename
+# Function to load model
 @st.cache_resource
 def load_model(model_name):
     return tf.keras.models.load_model(os.path.join("model", model_name))
 
-# Title of the app
+# Title
 st.title("Deepfake Face Detection")
 
-# File uploader for image or video
+# Upload
 uploaded_file = st.file_uploader("Upload a face image or video", type=["jpg", "png", "mp4"])
 
-# Function to determine which model to load based on the uploaded file type
+# Determine model
 def determine_model(uploaded_file):
     if uploaded_file is not None:
-        if uploaded_file.type in ["video/mp4"]:
-            return "CNN_RNN.h5"  # You can choose any model appropriate for videos
+        if uploaded_file.type == "video/mp4":
+            return "CNN_RNN.h5"
         elif uploaded_file.type in ["image/jpeg", "image/png"]:
-            return "new_model.h5"  # Choose a model appropriate for images
+            return "new_model.h5"
     return None
 
-# Automatically select the model based on the uploaded file
 selected_model = determine_model(uploaded_file)
 model = load_model(selected_model) if selected_model else None
 
+# Prediction logic
 if uploaded_file:
     if uploaded_file.type == "video/mp4":
         st.video(uploaded_file)
 
-        # Save video to a temporary file
+        # Save temp file
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_file.read())
         frames = extract_frames_from_video(tfile.name)
@@ -75,12 +75,9 @@ if uploaded_file:
             st.warning("Too few frames extracted. Try uploading a longer video.")
         else:
             frames_input = np.expand_dims(frames, axis=0)
-
-            # Assuming the model expects two inputs, prepare the second input accordingly
-            second_input = np.zeros((1, frames_input.shape[1], 1))  # Adjust this based on the expected shape of second input
+            second_input = np.zeros((1, frames_input.shape[1], 1))
             try:
-                inputs = [frames_input, second_input]  # Update inputs based on your model requirement
-                prediction = model.predict(inputs)
+                prediction = model.predict([frames_input, second_input])
                 st.write("Fake" if prediction[0][0] > 0.5 else "Real")
             except Exception as e:
                 st.error(f"Error during prediction: {e}")
@@ -93,11 +90,8 @@ if uploaded_file:
         img_array = preprocess_image(image)
 
         try:
-            # Assuming model expects two inputs, prepare the second input accordingly for image
-            second_input = np.zeros((1, 1))  # Adjust based on the second input's requirement
-            inputs = [img_array, second_input]  # Update inputs based on your model requirement
-            prediction = model.predict(inputs)
+            second_input = np.zeros((1, 1))  # Adjust if needed
+            prediction = model.predict([img_array, second_input])
             st.write("Fake" if prediction[0][0] > 0.5 else "Real")
         except Exception as e:
             st.error(f"Error during prediction: {e}")
-
