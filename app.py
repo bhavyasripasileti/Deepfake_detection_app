@@ -68,7 +68,7 @@ def main():
             img_array = np.expand_dims(img_array, axis=0)  # Prepare the image for model input
             
             # Load the model for image prediction
-            model = load_model("new_model.h5")  # Ensure this model is present in your "model" directory
+            model = load_model("model/new_model.h5")  # Ensure this model is present in your "model" directory
             
             # Placeholder for model prediction
             prediction = model.predict(img_array)  # Adjust this based on your model architecture
