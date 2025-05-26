@@ -20,6 +20,8 @@ def preprocess_image(image):
     """Resize and normalize the image."""
     image = image.resize((128, 128))  # Resize to the required input shape
     img_array = np.array(image) / 255.0
+    if img_array.shape[-1] == 4:  # If it has an alpha channel
+        img_array = img_array[..., :3]  # Use only RGB channels
     return np.expand_dims(img_array, axis=0)  # Expand dims to (1, 128, 128, 3)
 
 def extract_frames_from_video(video_path, max_frames=30):
@@ -36,6 +38,8 @@ def extract_frames_from_video(video_path, max_frames=30):
             break
         if count % interval == 0:
             frame = cv2.resize(frame, (128, 128)) / 255.0  # Normalize and resize
+            if frame.shape[-1] == 4:  # If it has an alpha channel
+                frame = frame[..., :3]  # Use only RGB channels
             frames.append(frame)
         count += 1
 
@@ -65,11 +69,11 @@ if uploaded_file:
         # Handle image upload
         image = Image.open(uploaded_file)
         st.image(image, caption="Uploaded Image", use_column_width=True)
-        
+
         img_array = preprocess_image(image)
 
         # Debugging output for image shape
-        st.write(f"Image array shape: {img_array.shape}")  
+        st.write(f"Image array shape: {img_array.shape}")
 
         try:
             prediction = model.predict(img_array)
