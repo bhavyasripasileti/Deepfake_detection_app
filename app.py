@@ -5,6 +5,8 @@ import numpy as np
 from PIL import Image
 import os
 import tensorflow as tf
+from tensorflow.keras.applications import ResNet50
+from tensorflow.keras.applications.resnet50 import preprocess_input
 
 # Function to extract frames from the uploaded video
 def extract_frames_from_video(video_path):
@@ -15,18 +17,17 @@ def extract_frames_from_video(video_path):
         ret, frame = cap.read()
         if not ret:
             break
-        # Resize and normalize frames
-        frame = cv2.resize(frame, (224, 224)) / 255.0  
+        frame = cv2.resize(frame, (224, 224))  # Resize frames to (224, 224)
         frames.append(frame)
     
     cap.release()
     return np.array(frames)
 
-# Function to preprocess the image
-def preprocess_image(image):
-    image = image.resize((224, 224))  # Resize image to the required size
-    img_array = np.array(image) / 255.0  # Normalize the image
-    return img_array
+# Function to extract features from frames using a pre-trained model
+def extract_features(frames):
+    model = ResNet50(weights='imagenet', include_top=False, pooling='avg')  # Create the model
+    features = model.predict(preprocess_input(frames))  # Use the model to extract features
+    return features
 
 # Load the model
 @st.cache_resource
@@ -43,28 +44,31 @@ def main():
         # Save video/image to a temporary file
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_file.read())
-        
+
         if uploaded_file.name.endswith(('.mp4', '.avi', '.mov')):
-            # Extract frames from video
             frames = extract_frames_from_video(tfile.name)
             if frames.shape[0] < 10:
                 st.warning("Too few frames extracted. Try uploading a longer video.")
             else:
                 st.success(f"{len(frames)} frames extracted from video.")
-                # Load the model for video prediction
+
+                # Extract features from frames
+                features = extract_features(frames)  # Shape will be (num_frames, 2048)
+
+                # Adjusting for RNN input
+                if features.shape[0] >= 20:  # Ensure there are enough frames to make a sequence of 20
+                    features = features[:20]  # Taking first 20 feature vectors
+                else:
+                    st.warning("Not enough frames (20 required) after feature extraction.")
+                    return
+                
+                features = np.expand_dims(features, axis=0)  # Shape will become (1, 20, 2048)
+
                 model = load_model("model/CNN_RNN.h5")  # Ensure this model is present in your "model" directory
                 
-                # Prepare the input for the model
-                frames_input = np.expand_dims(frames, axis=0)  # Adjust input shape based on model requirement
-
-                # Assuming the model requires a second input; for example, this can be a metadata or sequence length
-                # Here I'm using a placeholder for the second input, adapt accordingly
-                additional_input = np.array([frames.shape[0]])  # Example, replace with your actual second input data
-                additional_input = np.expand_dims(additional_input, axis=0)  # Make it batch shape compatible
-
-                # Placeholder for model prediction
-                prediction = model.predict([frames_input, additional_input])  # Change to pass both inputs
-                st.write("Fake" if prediction[0][0] > 0.5 else "Real")  # Example condition based on model prediction
+                # Prediction
+                prediction = model.predict(features)  # Now this matches the expected input shape
+                st.write("Fake" if prediction[0][0] > 0.5 else "Real")
 
         elif uploaded_file.name.endswith(('.jpg', '.jpeg', '.png')):
             image = Image.open(uploaded_file)
@@ -78,7 +82,7 @@ def main():
             
             # Placeholder for model prediction
             prediction = model.predict(img_array)  # This assumes model for images only requires a single input
-            st.write("Fake" if prediction[0][0] > 0.5 else "Real")  # Example condition based on prediction
+            st.write("Fake" if prediction[0][0] > 0.5 else "Real")
 
         # Clean up the temporary file after processing
         os.remove(tfile.name)
