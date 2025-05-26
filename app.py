@@ -30,7 +30,7 @@ def extract_features(frames):
     return features
 
 # Load the model
-@st.cache_resource
+@st.cache(allow_output_mutation=True)
 def load_model(model_path):
     return tf.keras.models.load_model(model_path)
 
@@ -46,12 +46,12 @@ def main():
         tfile.write(uploaded_file.read())
 
         if uploaded_file.name.endswith(('.mp4', '.avi', '.mov')):
+            # Extract frames from video
             frames = extract_frames_from_video(tfile.name)
             if frames.shape[0] < 10:
                 st.warning("Too few frames extracted. Try uploading a longer video.")
             else:
                 st.success(f"{len(frames)} frames extracted from video.")
-
                 # Extract features from frames
                 features = extract_features(frames)  # Shape will be (num_frames, 2048)
 
@@ -61,30 +61,31 @@ def main():
                 else:
                     st.warning("Not enough frames (20 required) after feature extraction.")
                     return
-                
+
                 features = np.expand_dims(features, axis=0)  # Shape will become (1, 20, 2048)
 
-                # Context input for video (dummy data or actual context)
+                # Dummy context input for video (or actual context if available)
                 context_input_shape = 20  # The expected shape for context input as per the model
                 context_input = np.random.random((1, context_input_shape))  # Random context input of shape (1, 20)
 
                 # Load the model
                 model = load_model("model/CNN_RNN.h5")  # Ensure this model is present in your "model" directory
-            
+
                 # Prediction
                 predictions = model.predict([features, context_input])  # Pass inputs as a list
                 st.write("Fake" if predictions[0][0] > 0.5 else "Real")
 
         elif uploaded_file.name.endswith(('.jpg', '.jpeg', '.png')):
+            # Process uploaded image
             image = Image.open(uploaded_file)
             st.image(image, caption="Uploaded Image", use_column_width=True)
 
             img_array = np.array(image.resize((224, 224)))  # Preprocessing the image
             img_array = np.expand_dims(img_array, axis=0)  # Prepare the image for model input
-            
+
             # Load the specific model for image prediction
             model = load_model("model/new_model.h5")  # Assuming this model is present for image predictions
-            
+
             # Create dummy context input for image prediction
             context_input = np.random.random((1, 20))  # Create placeholder context input
 
