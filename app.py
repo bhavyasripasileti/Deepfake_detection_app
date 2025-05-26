@@ -64,12 +64,13 @@ def main():
                 
                 features = np.expand_dims(features, axis=0)  # Shape will become (1, 20, 2048)
 
-                # Prepare the second input - This is an example/placeholder, replace with your actual context data
-                context_input = np.random.random((1, your_context_shape))  # Replace 'your_context_shape' with the appropriate dimensions
+                # Define the shape of your context input, assuming it is 1-dimensional with a length of 10
+                context_input_shape = 10  # Change this to your actual shape
+                context_input = np.random.random((1, context_input_shape))  # Generate random context input
 
                 # Load the model
                 model = load_model("model/CNN_RNN.h5")  # Ensure this model is present in your "model" directory
-                
+            
                 # Prediction
                 predictions = model.predict([features, context_input])  # Pass inputs as a list
                 st.write("Fake" if predictions[0][0] > 0.5 else "Real")
