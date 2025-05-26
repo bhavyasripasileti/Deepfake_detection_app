@@ -6,6 +6,38 @@ import cv2
 import tempfile
 import os
 
+# Function to extract frames from the video
+def extract_frames_from_video(video_path, max_frames=30):
+    """Extract frames from a video file."""
+    cap = cv2.VideoCapture(video_path)
+    frames = []
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    interval = max(1, total_frames // max_frames)
+
+    count = 0
+    while len(frames) < max_frames and cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if count % interval == 0:
+            frame = cv2.resize(frame, (128, 128)) / 255.0  # Normalize and resize
+            if frame.shape[-1] == 4:  # If it has an alpha channel
+                frame = frame[..., :3]  # Use only RGB channels
+            frames.append(frame)
+        count += 1
+
+    cap.release()
+    return np.array(frames)
+
+# Function to preprocess a single image
+def preprocess_image(image):
+    """Resize and normalize the image."""
+    image = image.resize((128, 128))  # Resize to the required input shape
+    img_array = np.array(image) / 255.0  # Normalize to [0, 1]
+    if img_array.shape[-1] == 4:  # If it has an alpha channel
+        img_array = img_array[..., :3]  # Use only RGB channels
+    return np.expand_dims(img_array, axis=0)  # Expand dims to (1, 128, 128, 3)
+
 # Function to load model given a filename
 @st.cache_resource
 def load_model(model_name):
@@ -69,32 +101,3 @@ if uploaded_file:
         except Exception as e:
             st.error(f"Error during prediction: {e}")
 
-def preprocess_image(image):
-    """Resize and normalize the image."""
-    image = image.resize((128, 128))  # Resize to the required input shape
-    img_array = np.array(image) / 255.0
-    if img_array.shape[-1] == 4:  # If it has an alpha channel
-        img_array = img_array[..., :3]  # Use only RGB channels
-    return np.expand_dims(img_array, axis=0)  # Expand dims to (1, 128, 128, 3)
-
-def extract_frames_from_video(video_path, max_frames=30):
-    """Extract frames from a video file."""
-    cap = cv2.VideoCapture(video_path)
-    frames = []
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    interval = max(1, total_frames // max_frames)
-
-    count = 0
-    while len(frames) < max_frames and cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-        if count % interval == 0:
-            frame = cv2.resize(frame, (128, 128)) / 255.0  # Normalize and resize
-            if frame.shape[-1] == 4:  # If it has an alpha channel
-                frame = frame[..., :3]  # Use only RGB channels
-            frames.append(frame)
-        count += 1
-
-    cap.release()
-    return np.array(frames)
