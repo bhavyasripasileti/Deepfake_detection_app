@@ -59,8 +59,12 @@ if uploaded_file:
             st.warning("Too few frames extracted. Try uploading a longer video.")
         else:
             frames_input = np.expand_dims(frames, axis=0)  # Shape: (1, num_frames, 128, 128, 3)
+
+            # Assuming the model expects two inputs, prepare the second input accordingly
+            second_input = np.zeros((1, frames_input.shape[1], 1))  # Adjust based on the expected shape of the second input
             try:
-                prediction = model.predict(frames_input)
+                inputs = [frames_input, second_input]  # Update inputs based on your model requirement
+                prediction = model.predict(inputs)
                 st.write("Fake" if prediction[0][0] > 0.5 else "Real")
             except Exception as e:
                 st.error(f"Error during prediction: {e}")
@@ -72,11 +76,11 @@ if uploaded_file:
 
         img_array = preprocess_image(image)
 
-        # Debugging output for image shape
-        st.write(f"Image array shape: {img_array.shape}")
-
         try:
-            prediction = model.predict(img_array)
+            # Assuming model expects two inputs, prepare the second input accordingly for image
+            second_input = np.zeros((1, 1))  # Adjust based on the second input's requirement
+            inputs = [img_array, second_input]  # Update inputs based on your model requirement
+            prediction = model.predict(inputs)
             st.write("Fake" if prediction[0][0] > 0.5 else "Real")
         except Exception as e:
             st.error(f"Error during prediction: {e}")
