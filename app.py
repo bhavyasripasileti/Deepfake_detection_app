@@ -64,11 +64,15 @@ def main():
                 
                 features = np.expand_dims(features, axis=0)  # Shape will become (1, 20, 2048)
 
+                # Prepare the second input - This is an example/placeholder, replace with your actual context data
+                context_input = np.random.random((1, your_context_shape))  # Replace 'your_context_shape' with the appropriate dimensions
+
+                # Load the model
                 model = load_model("model/CNN_RNN.h5")  # Ensure this model is present in your "model" directory
                 
                 # Prediction
-                prediction = model.predict(features)  # Now this matches the expected input shape
-                st.write("Fake" if prediction[0][0] > 0.5 else "Real")
+                predictions = model.predict([features, context_input])  # Pass inputs as a list
+                st.write("Fake" if predictions[0][0] > 0.5 else "Real")
 
         elif uploaded_file.name.endswith(('.jpg', '.jpeg', '.png')):
             image = Image.open(uploaded_file)
