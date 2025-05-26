@@ -64,9 +64,9 @@ def main():
                 
                 features = np.expand_dims(features, axis=0)  # Shape will become (1, 20, 2048)
 
-                # Define the shape of your context input, assuming it is 1-dimensional with a length of 10
-                context_input_shape = 10  # Change this to your actual shape
-                context_input = np.random.random((1, context_input_shape))  # Generate random context input
+                # Context input should have a shape compatible with the model, assumed to be (1, 20)
+                context_input_shape = 20  # The expected shape for context input as per the model
+                context_input = np.random.random((1, context_input_shape))  # Random context input of shape (1, 20)
 
                 # Load the model
                 model = load_model("model/CNN_RNN.h5")  # Ensure this model is present in your "model" directory
@@ -79,11 +79,11 @@ def main():
             image = Image.open(uploaded_file)
             st.image(image, caption="Uploaded Image", use_column_width=True)
 
-            img_array = preprocess_image(image)
+            img_array = np.array(image.resize((224, 224)))  # Preprocessing the image
             img_array = np.expand_dims(img_array, axis=0)  # Prepare the image for model input
             
             # Load the specific model for image prediction
-            model = load_model("model/new_model.h5")  # Ensure this model is present in your "model" directory
+            model = load_model("model/new_model.h5")  # Assuming this model is present for image predictions
             
             # Placeholder for model prediction
             prediction = model.predict(img_array)  # This assumes model for images only requires a single input
