@@ -51,7 +51,7 @@ def main():
             else:
                 st.success(f"{len(frames)} frames extracted from video.")
                 # Load the model for video prediction
-                model = load_model("CNN_RNN.h5")  # Ensure this model is present in your "model" directory
+                model = load_model("model/CNN_RNN.h5")  # Ensure this model is present in your "model" directory
                 
                 # Prepare the input for the model
                 frames_input = np.expand_dims(frames, axis=0)  # Adjust input shape based on model requirement
