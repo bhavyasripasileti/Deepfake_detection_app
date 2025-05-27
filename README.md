@@ -110,19 +110,19 @@ The model was trained and validated using a balanced subset of the DFDC dataset.
 
 8. Challenges and Solutions
 
-High memory consumption during inference:
+a) High memory consumption during inference:
 
-Resolved by quantizing the model and limiting the length of input sequences.
+  -Resolved by quantizing the model and limiting the length of input sequences.
 
-Latency when uploading and processing large videos:
+b) Latency when uploading and processing large videos:
 
-Solved by sampling frames and restricting video duration.
+  -Solved by sampling frames and restricting video duration.
 
-Deployment issues with Streamlit dependencies:
+c) Deployment issues with Streamlit dependencies:
 
-Addressed by using a clean requirements.txt and virtual environments.
+  -Addressed by using a clean requirements.txt and virtual environments.
 
-Underperformance on low-quality or compressed videos:
+d) Underperformance on low-quality or compressed videos:
 
-Fixed by including such videos in the training set and using augmentation techniques.
+  -Fixed by including such videos in the training set and using augmentation techniques.
 
