@@ -12,14 +12,14 @@ from tensorflow.keras.applications.resnet50 import preprocess_input
 def extract_frames_from_video(video_path):
     cap = cv2.VideoCapture(video_path)
     frames = []
-    
+
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
         frame = cv2.resize(frame, (224, 224))  # Resize frames to (224, 224)
         frames.append(frame)
-    
+
     cap.release()
     return np.array(frames)
 
@@ -47,7 +47,7 @@ def main():
 
         # ----- VIDEO HANDLING -----
         if uploaded_file.name.endswith(('.mp4', '.avi', '.mov')):
-            st.video(tfile.name)  # Show the video in Streamlit
+            st.video(tfile.name)
 
             frames = extract_frames_from_video(tfile.name)
 
@@ -62,17 +62,22 @@ def main():
                     features = features[:20]
                 else:
                     st.warning("Not enough frames (20 required) after feature extraction.")
+                    os.remove(tfile.name)
                     return
 
                 features = np.expand_dims(features, axis=0)  # Shape: (1, 20, 2048)
 
-                context_input = np.random.random((1, 20))
+                # FIXED: Use deterministic context input
+                context_input = np.ones((1, 20))
 
                 model = load_model("model/CNN_RNN.h5")
-
                 prediction = model.predict([features, context_input])
 
-                if prediction[0][0] > 0.5:
+                # Show raw prediction score
+                score = prediction[0][0]
+                st.write(f"Prediction score: {score:.4f}")
+
+                if score > 0.5:
                     st.markdown("<h2 style='color:red;'>👎 Fake</h2>", unsafe_allow_html=True)
                 else:
                     st.markdown("<h2 style='color:green;'>👍 Real</h2>", unsafe_allow_html=True)
@@ -85,24 +90,28 @@ def main():
             # Resize and preprocess
             image = image.resize((224, 224))
             img_array = np.array(image)[:, :, :3]
-            img_array = np.expand_dims(img_array, axis=0)  # (1, 224, 224, 3)
+            img_array = np.expand_dims(img_array, axis=0)
             img_array = preprocess_input(img_array)
 
             # Extract features from image
             feature_model = ResNet50(weights='imagenet', include_top=False, pooling='avg')
-            features = feature_model.predict(img_array)  # (1, 2048)
+            features = feature_model.predict(img_array)
 
-            # Create a fake 20-frame sequence by tiling the image features
-            features = np.tile(features, (20, 1))  # (20, 2048)
+            # Fake 20-frame sequence
+            features = np.tile(features, (20, 1))
             features = np.expand_dims(features, axis=0)  # (1, 20, 2048)
 
-            context_input = np.random.random((1, 20))
+            # FIXED: Use deterministic context input
+            context_input = np.ones((1, 20))
 
             model = load_model("model/new_model.h5")
-
             prediction = model.predict([features, context_input])
 
-            if prediction[0][0] > 0.5:
+            # Show raw prediction score
+            score = prediction[0][0]
+            st.write(f"Prediction score: {score:.4f}")
+
+            if score > 0.5:
                 st.markdown("<h2 style='color:red;'>👎 Fake</h2>", unsafe_allow_html=True)
             else:
                 st.markdown("<h2 style='color:green;'>👍 Real</h2>", unsafe_allow_html=True)
