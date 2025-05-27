@@ -1,0 +1,14 @@
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, LSTM, Dense
+
+input_features = Input(shape=(20, 2048))  # No context input
+x = LSTM(64, return_sequences=False)(input_features)
+output = Dense(1, activation='sigmoid')(x)
+
+model = Model(inputs=input_features, outputs=output)
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+# Fit with features of shape (N, 20, 2048) and labels (N,)
+model.fit(X_train, y_train, epochs=10, batch_size=16, validation_split=0.2)
+
+model.save("model/fixed_model.h5")
