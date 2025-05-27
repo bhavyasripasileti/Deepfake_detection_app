@@ -58,8 +58,6 @@ Dataset: Deepfake Detection Challenge (DFDC) Dataset by Meta
 
 └── README.md
 
-![projectimage](https://github.com/user-attachments/assets/3eeabf3d-9070-4df6-9128-8bb77148c7e9)
-
 
 
 4. Data Pipeline
