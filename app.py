@@ -32,10 +32,14 @@ def extract_features(frames):
     features = model.predict(preprocessed, verbose=0)
     return features
 
-# Cache the loaded model
+# Cache the loaded model with error handling
 @st.cache_resource
 def load_model(model_path):
-    return tf.keras.models.load_model(model_path)
+    try:
+        return tf.keras.models.load_model(model_path)
+    except OSError as e:
+        st.error(f"Error loading model: {e}")
+        raise e  # Re-raise the error after logging it
 
 # Display real/fake result
 def display_result(prediction):
