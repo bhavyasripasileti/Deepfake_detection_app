@@ -32,6 +32,20 @@ Web Deployment: Streamlit
 
 Dataset: Deepfake Detection Challenge (DFDC) Dataset by Meta
 
+--Project Structure:
+   deepfake-lstm-detection/
+├── app.py
+├── model/
+│ └── lstm_model.h5
+├── utils/
+│ └── preprocessing.py
+├── sample_videos/
+├── images/
+│ └── architecture_diagram.png
+│ └── prediction_ui.png
+├── requirements.txt
+└── README.md
+
 4. Data Pipeline
 
 Frame Extraction: Video files are first processed to extract individual frames at uniform intervals.
