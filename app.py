@@ -117,9 +117,9 @@ def main():
             st.write(f"🧪 **Prediction Score:** `{score:.4f}`")
 
             if score > 0.5:
-                st.markdown("<h2 style='color:red;'>👎 Fake</h2>", unsafe_allow_html=True)
-            else:
                 st.markdown("<h2 style='color:green;'>👍 Real</h2>", unsafe_allow_html=True)
+            else:
+                st.markdown("<h2 style='color:red;'>👎 Fake</h2>", unsafe_allow_html=True)
 
         os.remove(tfile.name)
 
