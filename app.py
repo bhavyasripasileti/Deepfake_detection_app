@@ -8,115 +8,119 @@ import tensorflow as tf
 from tensorflow.keras.applications import ResNet50
 from tensorflow.keras.applications.resnet50 import preprocess_input
 
-# Function to extract frames from the uploaded video
-def extract_frames_from_video(video_path):
+# Extract frames with skipping and limit
+def extract_frames_from_video(video_path, max_frames=100, skip_rate=10):
     cap = cv2.VideoCapture(video_path)
     frames = []
+    count = 0
 
     while cap.isOpened():
         ret, frame = cap.read()
-        if not ret:
+        if not ret or len(frames) >= max_frames:
             break
-        frame = cv2.resize(frame, (224, 224))  # Resize frames to (224, 224)
-        frames.append(frame)
+        if count % skip_rate == 0:
+            frame = cv2.resize(frame, (224, 224))
+            frames.append(frame)
+        count += 1
 
     cap.release()
     return np.array(frames)
 
-# Function to extract features from frames using a pre-trained model
+# Extract CNN features from ResNet50
 def extract_features(frames):
     model = ResNet50(weights='imagenet', include_top=False, pooling='avg')
-    features = model.predict(preprocess_input(frames))
+    frames = preprocess_input(frames)
+    features = model.predict(frames, verbose=0)
     return features
 
-# Load the model
+# Cache model loading
 @st.cache_resource
 def load_model(model_path):
     return tf.keras.models.load_model(model_path)
 
-# Main app function
+# App starts here
 def main():
-    st.title("Deepfake Detection App")
+    st.title("🧠 Deepfake Detection App")
 
-    uploaded_file = st.file_uploader("Upload a video or an image", type=['mp4', 'avi', 'mov', 'jpg', 'jpeg', 'png'])
+    uploaded_file = st.file_uploader("Upload a video or image", type=['mp4', 'avi', 'mov', 'jpg', 'jpeg', 'png'])
 
     if uploaded_file is not None:
-        # Save uploaded file to a temporary location
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_file.read())
 
-        # ----- VIDEO HANDLING -----
-        if uploaded_file.name.endswith(('.mp4', '.avi', '.mov')):
+        is_video = uploaded_file.name.endswith(('.mp4', '.avi', '.mov'))
+        is_image = uploaded_file.name.endswith(('.jpg', '.jpeg', '.png'))
+
+        if is_video:
             st.video(tfile.name)
 
-            frames = extract_frames_from_video(tfile.name)
+            with st.spinner("Extracting and processing frames..."):
+                frames = extract_frames_from_video(tfile.name)
 
-            if frames.shape[0] < 10:
-                st.warning("Too few frames extracted. Try uploading a longer video.")
-            else:
-                st.success(f"{len(frames)} frames extracted from video.")
+            st.success(f"{len(frames)} frames extracted (skipped every 10).")
 
+            if len(frames) < 10:
+                st.warning("Too few frames to make prediction.")
+                os.remove(tfile.name)
+                return
+
+            with st.spinner("Extracting features..."):
                 features = extract_features(frames)
 
-                if features.shape[0] >= 20:
-                    features = features[:20]
-                else:
-                    st.warning("Not enough frames (20 required) after feature extraction.")
-                    os.remove(tfile.name)
-                    return
+            # Ensure 20-frame length for model
+            if features.shape[0] >= 20:
+                features = features[:20]
+            else:
+                st.warning("Not enough valid frames after processing.")
+                os.remove(tfile.name)
+                return
 
-                features = np.expand_dims(features, axis=0)  # Shape: (1, 20, 2048)
-
-                # FIXED: Use deterministic context input
-                context_input = np.ones((1, 20))
-
-                model = load_model("model/CNN_RNN.h5")
-                prediction = model.predict([features, context_input])
-
-                # Show raw prediction score
-                score = prediction[0][0]
-                st.write(f"Prediction score: {score:.4f}")
-
-                if score > 0.5:
-                    st.markdown("<h2 style='color:red;'>👎 Fake</h2>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<h2 style='color:green;'>👍 Real</h2>", unsafe_allow_html=True)
-
-        # ----- IMAGE HANDLING -----
-        elif uploaded_file.name.endswith(('.jpg', '.jpeg', '.png')):
-            image = Image.open(tfile.name).convert("RGB")
-            st.image(image, caption="Uploaded Image", use_column_width=True)
-
-            # Resize and preprocess
-            image = image.resize((224, 224))
-            img_array = np.array(image)[:, :, :3]
-            img_array = np.expand_dims(img_array, axis=0)
-            img_array = preprocess_input(img_array)
-
-            # Extract features from image
-            feature_model = ResNet50(weights='imagenet', include_top=False, pooling='avg')
-            features = feature_model.predict(img_array)
-
-            # Fake 20-frame sequence
-            features = np.tile(features, (20, 1))
             features = np.expand_dims(features, axis=0)  # (1, 20, 2048)
+            context_input = np.ones((1, 20))  # Use fixed context input
 
-            # FIXED: Use deterministic context input
-            context_input = np.ones((1, 20))
+            model = load_model("model/CNN_RNN.h5")
 
-            model = load_model("model/new_model.h5")
-            prediction = model.predict([features, context_input])
+            with st.spinner("Running prediction..."):
+                prediction = model.predict([features, context_input], verbose=0)
 
-            # Show raw prediction score
             score = prediction[0][0]
-            st.write(f"Prediction score: {score:.4f}")
+            st.write(f"🧪 **Prediction Score:** `{score:.4f}`")
 
             if score > 0.5:
                 st.markdown("<h2 style='color:red;'>👎 Fake</h2>", unsafe_allow_html=True)
             else:
                 st.markdown("<h2 style='color:green;'>👍 Real</h2>", unsafe_allow_html=True)
 
-        # Clean up temporary file
+        elif is_image:
+            image = Image.open(tfile.name).convert("RGB")
+            st.image(image, caption="Uploaded Image", use_column_width=True)
+
+            image = image.resize((224, 224))
+            img_array = np.expand_dims(np.array(image)[:, :, :3], axis=0)
+            img_array = preprocess_input(img_array)
+
+            with st.spinner("Extracting image features..."):
+                feature_model = ResNet50(weights='imagenet', include_top=False, pooling='avg')
+                features = feature_model.predict(img_array, verbose=0)
+
+            # Fake 20-frame sequence from static image
+            features = np.tile(features, (20, 1))
+            features = np.expand_dims(features, axis=0)  # (1, 20, 2048)
+            context_input = np.ones((1, 20))
+
+            model = load_model("model/new_model.h5")
+
+            with st.spinner("Running prediction..."):
+                prediction = model.predict([features, context_input], verbose=0)
+
+            score = prediction[0][0]
+            st.write(f"🧪 **Prediction Score:** `{score:.4f}`")
+
+            if score > 0.5:
+                st.markdown("<h2 style='color:red;'>👎 Fake</h2>", unsafe_allow_html=True)
+            else:
+                st.markdown("<h2 style='color:green;'>👍 Real</h2>", unsafe_allow_html=True)
+
         os.remove(tfile.name)
 
 if __name__ == "__main__":
