@@ -43,7 +43,7 @@ def main():
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_file.read())
 
-        model = load_model("model/latest_EfficientNetB2.h5")
+        model = load_model("model/fixed_model.h5")
 
         # ---------- VIDEO ----------
         if uploaded_file.name.endswith(('.mp4', '.avi', '.mov')):
