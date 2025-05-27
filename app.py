@@ -76,7 +76,7 @@ def main():
                 return
 
             features = np.expand_dims(features, axis=0)  # (1, 20, 2048)
-            context_input = np.ones((20, 2048))  # Use fixed context input
+            context_input = np.ones((1, 20))  # Use fixed context input
 
             model = load_model("model/CNN_RNN.h5")
 
@@ -106,7 +106,7 @@ def main():
             # Fake 20-frame sequence from static image
             features = np.tile(features, (20, 1))
             features = np.expand_dims(features, axis=0)  # (1, 20, 2048)
-            context_input = np.ones((20, 2048))
+            context_input = np.ones((1, 20))
 
             model = load_model("model/new_model.h5")
 
