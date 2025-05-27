@@ -1,5 +1,7 @@
 Project Title: Deepfake Face Detection using LSTM
 
+![cover](https://github.com/user-attachments/assets/28d76e81-3fb7-4172-a191-22cfd89a655a)
+
 1. Project Overview
 
 Deepfakes are AI-generated videos in which a person's face or voice is manipulated to make them appear to do or say something they never did. These videos can pose serious threats to privacy, trust, and security. With the increasing realism of such content, detecting deepfakes has become a significant challenge.
