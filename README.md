@@ -66,6 +66,9 @@ Output Layer: A Dense layer with a sigmoid activation outputs the probability of
 
 This architecture enables the model to detect unnatural changes or inconsistencies in facial features over time, which are often signs of manipulated content.
 
+---Flow Chart : 
+![System Architecture](https://github.com/user-attachments/assets/ff8bc8f3-1e16-4982-a240-1489758a5249)
+
 6. Deployment and User Interface
 
 The project is deployed using Streamlit, an open-source Python framework for building data apps. The web interface allows users to:
