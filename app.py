@@ -40,7 +40,7 @@ def load_model(model_path):
 
 # App starts here
 def main():
-    st.title(" Deepfake Detection App")
+    st.title("🧠 Deepfake Detection App")
 
     uploaded_file = st.file_uploader("Upload a video or image", type=['mp4', 'avi', 'mov', 'jpg', 'jpeg', 'png'])
 
