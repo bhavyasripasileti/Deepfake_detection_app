@@ -35,7 +35,7 @@ def load_model(model_path):
 
 # Main Streamlit app
 def main():
-    st.title("Deepfake Detection App (Fixed)")
+    st.title("Deepfake Detection App ")
 
     uploaded_file = st.file_uploader("Upload a video or an image", type=['mp4', 'avi', 'mov', 'jpg', 'jpeg', 'png'])
 
@@ -43,7 +43,7 @@ def main():
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_file.read())
 
-        model = load_model("model/fixed_model.h5")
+        model = load_model("model/latest_EfficientNetB2.h5")
 
         # ---------- VIDEO ----------
         if uploaded_file.name.endswith(('.mp4', '.avi', '.mov')):
