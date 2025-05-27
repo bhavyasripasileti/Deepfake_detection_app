@@ -86,7 +86,7 @@ def main():
             score = prediction[0][0]
             st.write(f"🧪 **Prediction Score:** `{score:.4f}`")
 
-            if score > 0.7:
+            if score > 0.75:
                 st.markdown("<h2 style='color:green;'>👍 Real</h2>", unsafe_allow_html=True)
             else:
                 st.markdown("<h2 style='color:red;'>👎 Fake</h2>", unsafe_allow_html=True)
@@ -116,7 +116,7 @@ def main():
             score = prediction[0][0]
             st.write(f"🧪 **Prediction Score:** `{score:.4f}`")
 
-            if score > 0.7:
+            if score > 0.75:
                 st.markdown("<h2 style='color:green;'>👍 Real</h2>", unsafe_allow_html=True)
             else:
                 st.markdown("<h2 style='color:red;'>👎 Fake</h2>", unsafe_allow_html=True)
