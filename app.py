@@ -40,7 +40,7 @@ def load_model(model_path):
 
 # App starts here
 def main():
-    st.title("🧠 Deepfake Detection App")
+    st.title("Deepfake Detection App")
 
     uploaded_file = st.file_uploader("Upload a video or image", type=['mp4', 'avi', 'mov', 'jpg', 'jpeg', 'png'])
 
@@ -87,9 +87,9 @@ def main():
             st.write(f"🧪 **Prediction Score:** `{score:.4f}`")
 
             if score > 0.5:
-                st.markdown("<h2 style='color:red;'>👎 Fake</h2>", unsafe_allow_html=True)
-            else:
                 st.markdown("<h2 style='color:green;'>👍 Real</h2>", unsafe_allow_html=True)
+            else:
+                st.markdown("<h2 style='color:red;'>👎 Fake</h2>", unsafe_allow_html=True)
 
         elif is_image:
             image = Image.open(tfile.name).convert("RGB")
