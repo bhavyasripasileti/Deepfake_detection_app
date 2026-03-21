@@ -1,0 +1,15 @@
+[server]
+maxUploadSize = 200
+headless = true
+enableCORS = false
+fileWatcherType = "none"
+
+[theme]
+primaryColor = "#4A90E2"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F5F7FA"
+textColor = "#1A1A2E"
+font = "sans serif"
+
+[logger]
+level = "warning"
