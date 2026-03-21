@@ -64,15 +64,15 @@ def build_splits(dataset_root):
         cls_dir = Path(dataset_root) / cls
         if not cls_dir.exists():
             raise FileNotFoundError(f"Missing directory: {cls_dir}")
-        for p in sorted(cls_dir.rglob("*.jpg")):
+        all_files = sorted(cls_dir.rglob("*.jpg"))[:1000]
+        for p in all_files:
             samples.append((p, label))
-    random.seed(CFG.seed if hasattr(CFG, 'seed') else 42)
+    random.seed(42)
     random.shuffle(samples)
     n      = len(samples)
     n_val  = int(n * 0.15)
     n_test = int(n * 0.10)
     return samples[n_val + n_test:], samples[:n_val], samples[n_val:n_val + n_test]
-
 
 def main():
     parser = argparse.ArgumentParser()
