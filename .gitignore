@@ -5,7 +5,6 @@ __pycache__/
 venv/
 .venv/
 
-weights/*.h5
 weights/*.tflite
 weights/*.onnx
 
