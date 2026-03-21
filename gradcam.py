@@ -1,15 +1,13 @@
-import cv2
 import numpy as np
 import tensorflow as tf
 from config import CFG
 from preprocessing import normalize
 
 def compute_gradcam(model, face_rgb):
-    """Compute Grad-CAM heatmap for a face crop. Returns RGB heatmap."""
+    import cv2
     try:
         conv_layer = model.get_layer(CFG.gradcam_layer)
     except ValueError:
-        # Search inside sub-models (e.g. EfficientNet wrapped in functional model)
         conv_layer = None
         for layer in model.layers:
             if hasattr(layer, "layers"):
@@ -47,7 +45,6 @@ def compute_gradcam(model, face_rgb):
     return cv2.cvtColor(heatmap_bgr, cv2.COLOR_BGR2RGB)
 
 def overlay_heatmap(face_rgb, heatmap_rgb):
-    """Blend face crop with Grad-CAM heatmap."""
     blended = (1 - CFG.gradcam_alpha) * face_rgb.astype("float32") + \
                CFG.gradcam_alpha * heatmap_rgb.astype("float32")
     return np.clip(blended, 0, 255).astype(np.uint8)
