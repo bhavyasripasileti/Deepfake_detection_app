@@ -6,37 +6,32 @@ from preprocessing import normalize
 def compute_gradcam(model, face_rgb):
     import cv2
 
-    # 🔥 STEP 1 — find EfficientNet base model
-    base_model = None
-    for layer in model.layers:
-        if "efficientnet" in layer.name.lower():
-            base_model = layer
+    # 🔥 STEP 1 — find last conv layer dynamically
+    last_conv_layer = None
+    for layer in reversed(model.layers):
+        if isinstance(layer, tf.keras.layers.Conv2D):
+            last_conv_layer = layer
             break
 
-    if base_model is None:
-        raise ValueError("EfficientNet base model not found")
+    if last_conv_layer is None:
+        raise ValueError("No Conv2D layer found for Grad-CAM")
 
-    # 🔥 STEP 2 — get last conv layer
-    last_conv_layer = base_model.get_layer("top_conv")
-
-    # 🔥 STEP 3 — create grad model
+    # 🔥 STEP 2 — build grad model (FULL graph, no break)
     grad_model = tf.keras.models.Model(
-        inputs=model.inputs,
+        inputs=model.input,
         outputs=[last_conv_layer.output, model.output]
     )
 
-    # 🔥 STEP 4 — preprocess input
+    # 🔥 STEP 3 — preprocess
     img = normalize(face_rgb.astype("float32"))[np.newaxis]
-    img_tensor = tf.cast(img, tf.float32)
 
-    # 🔥 STEP 5 — compute gradients
     with tf.GradientTape() as tape:
-        conv_outputs, predictions = grad_model(img_tensor)
+        conv_outputs, predictions = grad_model(img)
         loss = predictions[:, 0]
 
     grads = tape.gradient(loss, conv_outputs)
 
-    # 🔥 STEP 6 — global average pooling
+    # 🔥 STEP 4 — compute weights
     pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
 
     conv_outputs = conv_outputs[0]
@@ -47,7 +42,7 @@ def compute_gradcam(model, face_rgb):
     if np.max(heatmap) > 0:
         heatmap /= np.max(heatmap)
 
-    # 🔥 STEP 7 — resize + color
+    # 🔥 STEP 5 — resize + color
     H, W = face_rgb.shape[:2]
     heatmap = cv2.resize(heatmap.numpy(), (W, H))
     heatmap = (heatmap * 255).astype(np.uint8)
