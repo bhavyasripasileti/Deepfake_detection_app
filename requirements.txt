@@ -1,9 +1,9 @@
 streamlit
-tensorflow-cpu
+torch
+torchvision
 opencv-python-headless
 mtcnn
 Pillow
 numpy
 pandas
 plotly
-protobuf
