@@ -1,20 +1,26 @@
 import os
-os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "0"
-import cv2
 import numpy as np
-from mtcnn import MTCNN
 from config import CFG
 
 _detector = None
+_cv2 = None
+
+def _get_cv2():
+    global _cv2
+    if _cv2 is None:
+        import cv2
+        _cv2 = cv2
+    return _cv2
 
 def get_detector():
     global _detector
     if _detector is None:
+        from mtcnn import MTCNN
         _detector = MTCNN()
     return _detector
 
 def crop_face(frame_bgr):
-    """Detect and crop face from BGR frame. Returns RGB crop or None."""
+    cv2 = _get_cv2()
     rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     detections = get_detector().detect_faces(rgb)
     if not detections:
@@ -36,18 +42,17 @@ def crop_face(frame_bgr):
     return cv2.resize(crop, (CFG.face_size, CFG.face_size))
 
 def crop_face_pil(pil_image):
-    """Detect and crop face from PIL Image."""
+    cv2 = _get_cv2()
     rgb = np.array(pil_image.convert("RGB"))
     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
     return crop_face(bgr)
 
 def normalize(face_rgb):
-    """Apply EfficientNet preprocessing. Input: RGB uint8. Output: float32."""
     from tensorflow.keras.applications.efficientnet import preprocess_input
     return preprocess_input(face_rgb.astype("float32"))
 
 def extract_faces_from_video(video_path, num_frames=CFG.num_frames):
-    """Sample faces uniformly from a video. Returns (faces_array, indices)."""
+    cv2 = _get_cv2()
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         return np.empty((0, CFG.face_size, CFG.face_size, 3), dtype=np.uint8), []
