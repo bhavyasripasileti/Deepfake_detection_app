@@ -15,7 +15,6 @@ from PIL import Image
 
 from config import CFG
 from inference import get_model, get_lstm_model, get_cnn_extractor, predict_image, predict_video
-from gradcam import compute_gradcam, overlay_heatmap
 
 
 def inject_css():
@@ -62,7 +61,7 @@ def inject_css():
 def sidebar():
     with st.sidebar:
         st.title("🕵️ Deepfake Detector")
-        st.caption("EfficientNetB4 + MTCNN + BiLSTM + Grad-CAM")
+        st.caption("EfficientNetB4 + MTCNN + BiLSTM")
         st.divider()
 
         st.subheader("Settings")
@@ -70,9 +69,8 @@ def sidebar():
         aggregation = st.radio("Video aggregation", ["mean", "majority"], index=0)
 
         st.divider()
-        st.subheader("Explainability")
-        show_gradcam = st.toggle("Grad-CAM heatmap", value=True)
-        show_gallery = st.toggle("Frame gallery",    value=True)
+        st.subheader("Display")
+        show_gallery = st.toggle("Frame gallery", value=True)
 
         st.divider()
         st.subheader("Model info")
@@ -88,7 +86,7 @@ def sidebar():
         st.caption("Label: 1 = FAKE · 0 = REAL")
 
     return dict(num_frames=num_frames, aggregation=aggregation,
-                show_gradcam=show_gradcam, show_gallery=show_gallery)
+                show_gallery=show_gallery)
 
 
 def render_verdict(result, media_type):
@@ -162,26 +160,6 @@ def render_chart(frame_scores):
         st.bar_chart(pd.DataFrame({"Score": frame_scores}), height=240)
 
 
-def render_gradcam(result, model):
-    faces, scores = result["faces"], result["frame_scores"]
-    if len(faces) == 0:
-        return
-    st.subheader("🔥 Grad-CAM")
-    st.caption("Regions that influenced the prediction most.")
-    top = int(np.argmax(scores)) if scores else 0
-    with st.spinner("Computing Grad-CAM …"):
-        try:
-            heatmap = compute_gradcam(model, faces[top])
-            overlay = overlay_heatmap(faces[top], heatmap)
-            c1, c2, c3 = st.columns(3)
-            c1.image(faces[top], caption="Face crop",        use_column_width=True)
-            c2.image(heatmap,    caption="Activation map",   use_column_width=True)
-            c3.image(overlay,    caption="Grad-CAM overlay", use_column_width=True)
-            st.caption(f"Most suspicious frame: {top}  |  Score: {scores[top]:.1%}")
-        except Exception as e:
-            st.warning(f"Grad-CAM failed: {e}")
-
-
 def render_gallery(result):
     faces, scores = result["faces"], result["frame_scores"]
     if len(faces) == 0:
@@ -227,11 +205,8 @@ def run_image(uploaded, model, settings):
             elapsed = time.time() - t0
         render_verdict(result, "image")
         st.caption(f"Inference time: {elapsed:.2f} s")
-    if result["label"] != "UNKNOWN":
-        if settings["show_gradcam"]:
-            render_gradcam(result, model)
-        if settings["show_gallery"]:
-            render_gallery(result)
+    if result["label"] != "UNKNOWN" and settings["show_gallery"]:
+        render_gallery(result)
 
 
 def run_video(uploaded, model, settings):
@@ -262,8 +237,6 @@ def run_video(uploaded, model, settings):
 
         if result["label"] != "UNKNOWN":
             render_chart(result["frame_scores"])
-            if settings["show_gradcam"]:
-                render_gradcam(result, model)
             if settings["show_gallery"]:
                 render_gallery(result)
     finally:
@@ -283,14 +256,12 @@ def main():
         unsafe_allow_html=True)
     st.divider()
 
-    # Load CNN model (always needed)
     try:
         model = get_model()
     except FileNotFoundError as e:
         st.error(str(e))
         st.stop()
 
-    # Pre-warm LSTM + extractor (failures handled gracefully in inference.py)
     try:
         get_cnn_extractor()
         get_lstm_model()
@@ -312,8 +283,7 @@ def main():
 3. For **images** — a Dense head outputs the fake probability directly.
 4. For **videos** — frame features are passed as a sequence into a **BiLSTM**,
    which analyses temporal inconsistencies across frames before giving a verdict.
-5. **Grad-CAM** highlights the regions that drove the CNN decision.
-6. Per-frame CNN scores are shown in the bar chart for full transparency.
+5. Per-frame CNN scores are shown in the bar chart for full transparency.
             """)
         return
 
