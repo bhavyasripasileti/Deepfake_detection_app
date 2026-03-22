@@ -15,21 +15,35 @@ from preprocessing import (
 
 @st.cache_resource(show_spinner=False)
 def get_model():
-    """Load, warm up, and cache the CNN image model."""
+    """Load and cache the CNN image model with proper warm-up."""
     import os
     if not os.path.exists(CFG.model_path):
         raise FileNotFoundError(
             f"Model not found at '{CFG.model_path}'.\n"
-            "Run create_model.py or train.py to create it first."
+            "Run create_model.py to create a dummy model, or train.py to train one."
         )
-    from model import load_model
-    model = load_model()
+    # Load with compile=True so BatchNorm moving averages are restored correctly
+    from tensorflow.keras.models import load_model as keras_load
+    import tensorflow as tf
 
-    # Warm-up pass — forces Keras to fully build all internal states.
-    # Without this, BatchNormalization layers can output garbage on the
-    # first real inference call, causing everything to look FAKE.
+    model = keras_load(
+        CFG.model_path,
+        compile=False,
+        custom_objects=None,
+    )
+
+    # Re-compile so metrics work
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(1e-4),
+        loss="binary_crossentropy",
+        metrics=["accuracy"],
+    )
+
+    # Warm-up: run two dummy passes so BatchNorm and Dropout
+    # settle into inference mode properly
     dummy = np.zeros((1, CFG.face_size, CFG.face_size, 3), dtype="float32")
-    model.predict(dummy, verbose=0)
+    model(dummy, training=False)
+    model(dummy, training=False)
 
     return model
 
@@ -37,30 +51,32 @@ def get_model():
 @st.cache_resource(show_spinner=False)
 def get_cnn_extractor():
     """
-    Load the CNN feature extractor for the video LSTM pipeline.
-    Tries CFG.cnn_extractor_path first, then falls back to deriving
-    it from the main CNN model's GAP layer.
+    Load or derive the CNN feature extractor (backbone → GAP output).
+    Used by the video LSTM pipeline.
     """
     import os
-    from tensorflow.keras.models import load_model as keras_load
+    import tensorflow as tf
     from tensorflow.keras.models import Model
 
     if os.path.exists(CFG.cnn_extractor_path):
+        from tensorflow.keras.models import load_model as keras_load
         extractor = keras_load(CFG.cnn_extractor_path, compile=False)
     else:
-        # Derive from the main model
+        # Derive from the loaded CNN model:
+        # outer model has layers: [Input, EfficientNetB4, GAP, BN, Dropout, Dense, ...]
+        # We want: Input → EfficientNetB4 → GAP
         cnn = get_model()
         try:
             gap_out = cnn.get_layer("gap").output
         except ValueError:
-            # Fall back: use output of the layer before the Dense head
+            # fallback: 4th from last layer before the two Dense+Dropout head
             gap_out = cnn.layers[-4].output
         extractor = Model(inputs=cnn.input, outputs=gap_out,
                           name="CNN_Feature_Extractor")
 
     # Warm up
     dummy = np.zeros((1, CFG.face_size, CFG.face_size, 3), dtype="float32")
-    extractor.predict(dummy, verbose=0)
+    extractor(dummy, training=False)
 
     return extractor
 
@@ -68,17 +84,14 @@ def get_cnn_extractor():
 @st.cache_resource(show_spinner=False)
 def get_lstm_model():
     """
-    Load the BiLSTM video model from CFG.lstm_model_path.
-    Returns None (gracefully) if the file does not exist yet.
+    Load the BiLSTM video model.
+    Returns None if not yet trained (caller falls back to CNN mean).
     """
     import os
-    from tensorflow.keras.models import load_model as keras_load
-
     if not os.path.exists(CFG.lstm_model_path):
-        return None   # caller checks for None and falls back to CNN mean
-
-    model = keras_load(CFG.lstm_model_path, compile=False)
-    return model
+        return None
+    from tensorflow.keras.models import load_model as keras_load
+    return keras_load(CFG.lstm_model_path, compile=False)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -86,10 +99,16 @@ def get_lstm_model():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _predict_batch(faces_rgb, model):
-    """Run CNN model on a batch of RGB face crops. Returns list of float scores."""
-    batch = np.stack([normalize(f) for f in faces_rgb])
-    preds = model.predict(batch, verbose=0)
-    return preds.squeeze(-1).tolist()
+    """
+    Run CNN model on a batch of RGB face crops.
+    Uses model.__call__ with training=False to ensure BatchNorm
+    uses its stored moving averages (not batch statistics).
+    Returns list of float scores.
+    """
+    import tensorflow as tf
+    batch = np.stack([normalize(f) for f in faces_rgb]).astype("float32")
+    preds = model(batch, training=False)          # <-- training=False is critical
+    return preds.numpy().squeeze(-1).tolist()
 
 
 def _make_result(score, frame_scores, faces, model_tag="CNN"):
@@ -107,7 +126,7 @@ def _make_result(score, frame_scores, faces, model_tag="CNN"):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Image prediction  (CNN only)
+# Image prediction
 # ─────────────────────────────────────────────────────────────────────────────
 
 def predict_image(pil_image, model):
@@ -133,13 +152,11 @@ def predict_video(video_path, model, num_frames=CFG.num_frames):
     """
     Predict on a video using the CNN + BiLSTM pipeline.
 
-    Steps:
-      1. Extract MTCNN face crops from uniformly sampled frames.
-      2. Get per-frame CNN scores (shown in bar chart).
-      3. Run CNN extractor + BiLSTM for the final temporal verdict.
-         Falls back to CNN mean-pooling if LSTM model is unavailable.
+    1. Extract MTCNN face crops from uniformly sampled frames.
+    2. Get per-frame CNN scores (for the bar chart).
+    3. Run CNN extractor → BiLSTM for temporal verdict.
+       Falls back to CNN mean-pooling if LSTM not trained yet.
     """
-    # Step 1: extract face crops
     faces, _ = extract_faces_from_video(video_path, num_frames)
 
     if len(faces) == 0:
@@ -151,10 +168,10 @@ def predict_video(video_path, model, num_frames=CFG.num_frames):
             "error": "No faces detected in any video frame.",
         }
 
-    # Step 2: per-frame CNN scores for the chart
+    # Per-frame CNN scores for chart (always computed)
     frame_scores = _predict_batch(list(faces), model)
 
-    # Step 3: CNN + LSTM temporal prediction
+    # CNN + LSTM temporal prediction
     try:
         lstm_model = get_lstm_model()
 
@@ -164,15 +181,14 @@ def predict_video(video_path, model, num_frames=CFG.num_frames):
                 video_path, cnn_extractor, num_frames
             )
             if seq_tensor is not None:
-                video_score = float(lstm_model.predict(seq_tensor, verbose=0)[0][0])
+                video_score = float(lstm_model(seq_tensor, training=False).numpy()[0][0])
                 model_tag   = "CNN+LSTM"
             else:
                 video_score = float(np.mean(frame_scores))
                 model_tag   = "CNN (no faces for LSTM)"
         else:
-            # lstm_model.h5 not trained yet — use CNN mean
             video_score = float(np.mean(frame_scores))
-            model_tag   = "CNN (LSTM not trained)"
+            model_tag   = "CNN (LSTM not trained yet)"
 
     except Exception as e:
         print(f"[WARN] LSTM inference failed ({e}). Falling back to CNN mean.")
