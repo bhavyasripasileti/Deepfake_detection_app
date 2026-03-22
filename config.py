@@ -3,26 +3,24 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Config:
     # Model
-    model_path:      str   = "weights/deepfake_model.h5"
-    backbone:        str   = "efficientnetb4"
-    face_size:       int   = 224
-    dense_units:     int   = 256
-    dropout_rate:    float = 0.5
-
+    model_path:         str   = "weights/deepfake_model.h5"
+    cnn_extractor_path: str   = "weights/cnn_extractor.h5"
+    lstm_model_path:    str   = "weights/lstm_model.h5"
+    backbone:           str   = "efficientnetb4"
+    face_size:          int   = 224
+    dense_units:        int   = 256
+    dropout_rate:       float = 0.5
     # Inference
-    fake_threshold:  float = 0.5
-    fake_label:      int   = 1
-    real_label:      int   = 0
-
+    fake_threshold:     float = 0.5
+    fake_label:         int   = 1
+    real_label:         int   = 0
     # Video
-    num_frames:      int   = 10
-    max_upload_mb:   int   = 200
-
+    num_frames:         int   = 10
+    max_upload_mb:      int   = 200
     # Grad-CAM
-    gradcam_layer:   str   = "top_conv"
-    gradcam_alpha:   float = 0.45
-
+    gradcam_layer:      str   = "top_conv"
+    gradcam_alpha:      float = 0.45
     # UI
-    gallery_cols:    int   = 5
+    gallery_cols:       int   = 5
 
 CFG = Config()
