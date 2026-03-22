@@ -1,397 +1,329 @@
-"""
-Deepfake Face Detection Web Application
-CNN (EfficientNet) + LSTM Architecture
-- Image: CNN only
-- Video: CNN (frame feature extractor) + LSTM (temporal classifier)
-"""
-
 import streamlit as st
-import numpy as np
-import cv2
-import tempfile
-import os
-from PIL import Image
-import time
 
-# ─── Page Config ─────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="DeepFake Detector",
-    page_icon="🔍",
+    page_title="Deepfake Detector",
+    page_icon="🕵️",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
-# ─── Custom CSS ──────────────────────────────────────────────────────────────
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+import os
+import time
+import tempfile
+import numpy as np
+from PIL import Image
 
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-
-    .stApp { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); }
-
-    .main-header {
-        text-align: center;
-        padding: 2rem 0 1rem;
-    }
-    .main-header h1 {
-        font-size: 3rem;
-        font-weight: 700;
-        background: linear-gradient(90deg, #a78bfa, #60a5fa, #34d399);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 0.5rem;
-    }
-    .main-header p {
-        color: #94a3b8;
-        font-size: 1.1rem;
-    }
-
-    .upload-card {
-        background: rgba(255,255,255,0.05);
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 16px;
-        padding: 2rem;
-        margin: 1rem 0;
-        backdrop-filter: blur(10px);
-    }
-
-    .result-real {
-        background: linear-gradient(135deg, rgba(52,211,153,0.15), rgba(16,185,129,0.1));
-        border: 2px solid #34d399;
-        border-radius: 16px;
-        padding: 2rem;
-        text-align: center;
-    }
-    .result-fake {
-        background: linear-gradient(135deg, rgba(239,68,68,0.15), rgba(220,38,38,0.1));
-        border: 2px solid #ef4444;
-        border-radius: 16px;
-        padding: 2rem;
-        text-align: center;
-    }
-    .result-label {
-        font-size: 2.5rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
-    }
-    .confidence-text {
-        font-size: 1.2rem;
-        color: #cbd5e1;
-    }
-
-    .model-badge {
-        display: inline-block;
-        background: rgba(167,139,250,0.2);
-        border: 1px solid #a78bfa;
-        border-radius: 20px;
-        padding: 0.3rem 1rem;
-        font-size: 0.85rem;
-        color: #a78bfa;
-        margin: 0.5rem 0;
-    }
-
-    .info-box {
-        background: rgba(96,165,250,0.1);
-        border-left: 4px solid #60a5fa;
-        border-radius: 0 8px 8px 0;
-        padding: 1rem 1.5rem;
-        margin: 1rem 0;
-        color: #cbd5e1;
-        font-size: 0.95rem;
-    }
-
-    .frame-grid {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        justify-content: center;
-        margin: 1rem 0;
-    }
-
-    .stProgress > div > div { background: linear-gradient(90deg, #a78bfa, #60a5fa); }
-
-    div[data-testid="stFileUploader"] {
-        background: rgba(255,255,255,0.03);
-        border-radius: 12px;
-        padding: 0.5rem;
-    }
-
-    .stButton > button {
-        background: linear-gradient(135deg, #a78bfa, #60a5fa);
-        color: white;
-        border: none;
-        border-radius: 10px;
-        padding: 0.6rem 2rem;
-        font-weight: 600;
-        font-size: 1rem;
-        width: 100%;
-        transition: opacity 0.2s;
-    }
-    .stButton > button:hover { opacity: 0.85; }
-
-    .architecture-info {
-        background: rgba(255,255,255,0.04);
-        border-radius: 12px;
-        padding: 1.2rem;
-        margin: 0.5rem 0;
-        color: #94a3b8;
-        font-size: 0.9rem;
-        line-height: 1.7;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# ─── Lazy imports (heavy libs only when needed) ───────────────────────────────
-@st.cache_resource(show_spinner=False)
-def load_models():
-    """Load CNN image model and CNN+LSTM video model."""
-    from model import build_cnn_image_model, build_cnn_lstm_video_model
-    cnn_model   = build_cnn_image_model()
-    lstm_model  = build_cnn_lstm_video_model()
-    return cnn_model, lstm_model
-
-# ─── Prediction Helpers ───────────────────────────────────────────────────────
-def predict_image(model, img_array: np.ndarray) -> tuple[float, str]:
-    """Run CNN prediction on a single pre-processed image."""
-    from predict import preprocess_image, classify
-    tensor = preprocess_image(img_array)
-    prob   = float(model.predict(tensor, verbose=0)[0][0])
-    return prob, classify(prob)
+from config import CFG
+from inference import get_model, get_lstm_model, get_cnn_extractor, predict_image, predict_video
+from gradcam import compute_gradcam, overlay_heatmap
 
 
-def predict_video(cnn_model, lstm_model, video_path: str,
-                  n_frames: int = 20, face_only: bool = True) -> tuple[float, str, list]:
-    """
-    Extract n_frames from video → CNN features → LSTM → real/fake.
-    Returns (probability, label, list_of_frame_bgr_arrays).
-    """
-    from predict import preprocess_image, classify, extract_frames
-    frames_bgr = extract_frames(video_path, n_frames)
-    if len(frames_bgr) == 0:
-        return 0.5, "Unknown", []
-
-    # CNN feature extraction per frame  [n_frames, feature_dim]
-    feature_seq = []
-    for frame in frames_bgr:
-        tensor  = preprocess_image(frame)
-        feat    = cnn_model.predict(tensor, verbose=0)   # (1, feature_dim)
-        feature_seq.append(feat[0])
-
-    # Pad / trim to exactly n_frames
-    while len(feature_seq) < n_frames:
-        feature_seq.append(feature_seq[-1])
-    feature_seq = feature_seq[:n_frames]
-
-    # Stack → (1, n_frames, feature_dim)
-    seq_tensor = np.expand_dims(np.stack(feature_seq, axis=0), axis=0)
-    prob       = float(lstm_model.predict(seq_tensor, verbose=0)[0][0])
-    return prob, classify(prob), frames_bgr
-
-
-# ─── UI ───────────────────────────────────────────────────────────────────────
-st.markdown("""
-<div class="main-header">
-    <h1>🔍 DeepFake Detector</h1>
-    <p>Powered by <strong>EfficientNet B0</strong> + <strong>BiLSTM</strong> — detect manipulated faces in images & videos</p>
-</div>
-""", unsafe_allow_html=True)
-
-# Architecture info
-col_a, col_b = st.columns(2)
-with col_a:
+def inject_css():
     st.markdown("""
-    <div class="architecture-info">
-        <strong style="color:#a78bfa">🖼️ Image Pipeline</strong><br>
-        EfficientNet B0 → Global Average Pooling → Dense → <em>Real / Fake</em>
-    </div>
-    """, unsafe_allow_html=True)
-with col_b:
-    st.markdown("""
-    <div class="architecture-info">
-        <strong style="color:#60a5fa">🎬 Video Pipeline</strong><br>
-        EfficientNet B0 (feature extractor, frozen) → sequence of frame features → BiLSTM → <em>Real / Fake</em>
-    </div>
+    <style>
+    .block-container { padding-top: 1.5rem; }
+    .verdict-fake {
+        background:#fff0f0; border:2px solid #e74c3c;
+        border-radius:12px; padding:1rem 1.5rem; margin-bottom:1rem;
+    }
+    .verdict-real {
+        background:#f0fff4; border:2px solid #27ae60;
+        border-radius:12px; padding:1rem 1.5rem; margin-bottom:1rem;
+    }
+    .verdict-unknown {
+        background:#fffbf0; border:2px solid #f39c12;
+        border-radius:12px; padding:1rem 1.5rem; margin-bottom:1rem;
+    }
+    .verdict-fake h2   { color:#c0392b; margin:0; }
+    .verdict-real h2   { color:#1e8449; margin:0; }
+    .verdict-unknown h2{ color:#d35400; margin:0; }
+    .verdict-fake p, .verdict-real p, .verdict-unknown p
+                       { margin:0.25rem 0 0; font-size:0.9rem; }
+    .score-pill {
+        display:inline-block; font-size:1.8rem; font-weight:700;
+        padding:0.2rem 1rem; border-radius:10px; margin:0.4rem 0;
+    }
+    .pill-fake { color:#c0392b; background:#fdecea; }
+    .pill-real { color:#1e8449; background:#eafaf1; }
+    .frame-tag {
+        display:inline-block; font-size:11px; font-weight:600;
+        padding:2px 7px; border-radius:8px; margin-top:3px;
+    }
+    div[data-testid="metric-container"] {
+        background:var(--secondary-background-color);
+        border-radius:10px; padding:0.6rem 1rem;
+        border:1px solid rgba(0,0,0,0.07);
+    }
+    div[data-testid="stImage"] img { border-radius:8px; }
+    </style>
     """, unsafe_allow_html=True)
 
-st.markdown("---")
 
-# ─── Sidebar settings ────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("### ⚙️ Settings")
-    n_frames = st.slider("Frames to sample (video)", 8, 40, 20, 2,
-                         help="More frames = slower but more accurate")
-    threshold = st.slider("Fake detection threshold", 0.3, 0.7, 0.5, 0.05,
-                          help="Lower = stricter fake detection")
-    st.markdown("---")
-    st.markdown("### ℹ️ About")
-    st.markdown("""
-    **Model Architecture**
-    - Feature extractor: EfficientNet B0
-    - Temporal model: Bidirectional LSTM
-    - Input size: 224 × 224
-    - Sequence length: configurable
+def sidebar():
+    with st.sidebar:
+        st.title("🕵️ Deepfake Detector")
+        st.caption("EfficientNetB4 + MTCNN + BiLSTM + Grad-CAM")
+        st.divider()
 
-    **Supported formats**
-    - Images: JPG, JPEG, PNG, WEBP
-    - Videos: MP4, AVI, MOV, MKV
-    """)
+        st.subheader("Settings")
+        num_frames  = st.slider("Video frames to analyse", 10, 40, CFG.num_frames, 5)
+        aggregation = st.radio("Video aggregation", ["mean", "majority"], index=0)
 
-# ─── Upload ───────────────────────────────────────────────────────────────────
-st.markdown('<div class="upload-card">', unsafe_allow_html=True)
-tab_img, tab_vid = st.tabs(["🖼️ Image Detection", "🎬 Video Detection"])
+        st.divider()
+        st.subheader("Explainability")
+        show_gradcam = st.toggle("Grad-CAM heatmap", value=True)
+        show_gallery = st.toggle("Frame gallery",    value=True)
 
-# ════════════════════ IMAGE TAB ═══════════════════════════════════════════════
-with tab_img:
-    st.markdown("#### Upload an image to check for deepfakes")
-    uploaded_img = st.file_uploader(
-        "Choose image", type=["jpg","jpeg","png","webp"],
-        key="img_upload", label_visibility="collapsed"
+        st.divider()
+        st.subheader("Model info")
+        st.markdown(f"""
+        | | |
+        |---|---|
+        | Backbone | EfficientNetB4 |
+        | Input | {CFG.face_size}×{CFG.face_size} px |
+        | Face detector | MTCNN |
+        | Video model | BiLSTM |
+        | Threshold | ≥ {CFG.fake_threshold} → FAKE |
+        """)
+        st.caption("Label: 1 = FAKE · 0 = REAL")
+
+    return dict(num_frames=num_frames, aggregation=aggregation,
+                show_gradcam=show_gradcam, show_gallery=show_gallery)
+
+
+def render_verdict(result, media_type):
+    label      = result["label"]
+    score      = result["score"]
+    confidence = result["confidence"]
+    model_tag  = result.get("model_tag", "CNN")
+
+    if label == "UNKNOWN":
+        st.markdown(
+            f"<div class='verdict-unknown'><h2>⚠️ No Face Detected</h2>"
+            f"<p>{result.get('error','')}</p></div>",
+            unsafe_allow_html=True)
+        return
+
+    if label == "FAKE":
+        st.markdown(
+            "<div class='verdict-fake'><h2>🚨 FAKE — Deepfake Detected</h2>"
+            "<p>AI manipulation detected. Signs of GAN or face-swap artifacts.</p></div>",
+            unsafe_allow_html=True)
+    else:
+        st.markdown(
+            "<div class='verdict-real'><h2>✅ REAL — Authentic Media</h2>"
+            "<p>No manipulation detected. The face appears authentic.</p></div>",
+            unsafe_allow_html=True)
+
+    pill = "pill-fake" if label == "FAKE" else "pill-real"
+    st.markdown(
+        f"<div class='score-pill {pill}'>Fake probability: {score:.1%}</div>",
+        unsafe_allow_html=True)
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Fake probability",  f"{score:.1%}")
+    c2.metric("Real probability",  f"{1-score:.1%}")
+    c3.metric("Confidence",        f"{confidence:.1%}")
+    c4.metric("Faces analysed" if media_type == "image" else "Frames", str(result["n_faces"]))
+    c5.metric("Model", model_tag)
+
+    st.markdown("**Fake probability**")
+    st.progress(float(score))
+
+
+def render_chart(frame_scores):
+    if not frame_scores:
+        return
+    st.subheader("📊 Per-frame fake probability")
+    try:
+        import plotly.graph_objects as go
+        n = len(frame_scores)
+        fig = go.Figure(go.Bar(
+            x=list(range(n)),
+            y=frame_scores,
+            marker_color=["#e74c3c" if s >= CFG.fake_threshold else "#27ae60"
+                          for s in frame_scores],
+            hovertemplate="Frame %{x}<br>Score: %{y:.3f}<extra></extra>",
+        ))
+        fig.add_shape(type="line", x0=-0.5, x1=n - 0.5,
+                      y0=CFG.fake_threshold, y1=CFG.fake_threshold,
+                      line=dict(color="#e74c3c", width=1.5, dash="dash"))
+        fig.update_layout(
+            xaxis_title="Frame index", yaxis_title="Fake probability",
+            yaxis=dict(range=[0, 1]),
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=40, r=20, t=10, b=40), height=260, showlegend=False,
+        )
+        fig.update_xaxes(showgrid=False)
+        fig.update_yaxes(showgrid=True, gridcolor="rgba(0,0,0,0.07)")
+        st.plotly_chart(fig, use_container_width=True)
+    except ImportError:
+        import pandas as pd
+        st.bar_chart(pd.DataFrame({"Score": frame_scores}), height=240)
+
+
+def render_gradcam(result, model):
+    faces, scores = result["faces"], result["frame_scores"]
+    if len(faces) == 0:
+        return
+    st.subheader("🔥 Grad-CAM")
+    st.caption("Regions that influenced the prediction most.")
+    top = int(np.argmax(scores)) if scores else 0
+    with st.spinner("Computing Grad-CAM …"):
+        try:
+            heatmap = compute_gradcam(model, faces[top])
+            overlay = overlay_heatmap(faces[top], heatmap)
+            c1, c2, c3 = st.columns(3)
+            c1.image(faces[top], caption="Face crop",        use_column_width=True)
+            c2.image(heatmap,    caption="Activation map",   use_column_width=True)
+            c3.image(overlay,    caption="Grad-CAM overlay", use_column_width=True)
+            st.caption(f"Most suspicious frame: {top}  |  Score: {scores[top]:.1%}")
+        except Exception as e:
+            st.warning(f"Grad-CAM failed: {e}")
+
+
+def render_gallery(result):
+    faces, scores = result["faces"], result["frame_scores"]
+    if len(faces) == 0:
+        return
+    st.subheader("🖼️ Frame gallery")
+    tab1, tab2 = st.tabs(["Most suspicious", "All frames"])
+    COLS = CFG.gallery_cols
+
+    def tag(s):
+        c = "#e74c3c" if s >= CFG.fake_threshold else "#27ae60"
+        l = "FAKE" if s >= CFG.fake_threshold else "REAL"
+        return (f"<div class='frame-tag' style='background:{c}22;"
+                f"border:1px solid {c};color:{c}'>{l} {s:.0%}</div>")
+
+    with tab1:
+        order = np.argsort(scores)[::-1][:10]
+        cols  = st.columns(COLS)
+        for i, fi in enumerate(order):
+            with cols[i % COLS]:
+                st.image(faces[fi], use_column_width=True, caption=f"Frame {fi}")
+                st.markdown(tag(scores[fi]), unsafe_allow_html=True)
+
+    with tab2:
+        cols = st.columns(COLS)
+        for fi, face in enumerate(faces):
+            with cols[fi % COLS]:
+                st.image(face, use_column_width=True, caption=f"#{fi}")
+                st.markdown(tag(scores[fi] if fi < len(scores) else 0.0),
+                            unsafe_allow_html=True)
+
+
+def run_image(uploaded, model, settings):
+    image = Image.open(uploaded).convert("RGB")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Uploaded image")
+        st.image(image, use_column_width=True)
+    with col2:
+        st.subheader("Result")
+        with st.spinner("Analysing …"):
+            t0      = time.time()
+            result  = predict_image(image, model)
+            elapsed = time.time() - t0
+        render_verdict(result, "image")
+        st.caption(f"Inference time: {elapsed:.2f} s")
+    if result["label"] != "UNKNOWN":
+        if settings["show_gradcam"]:
+            render_gradcam(result, model)
+        if settings["show_gallery"]:
+            render_gallery(result)
+
+
+def run_video(uploaded, model, settings):
+    suffix = os.path.splitext(uploaded.name)[-1]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(uploaded.read())
+        tmp_path = tmp.name
+    try:
+        st.subheader("Uploaded video")
+        st.video(tmp_path)
+
+        with st.spinner(
+            f"Extracting {settings['num_frames']} frames and analysing with CNN + BiLSTM …"
+        ):
+            t0      = time.time()
+            result  = predict_video(tmp_path, model, settings["num_frames"])
+            elapsed = time.time() - t0
+
+        st.subheader("Result")
+        if "error" not in result:
+            model_tag = result.get("model_tag", "CNN+LSTM")
+            st.success(
+                f"✅ {result['n_faces']} face crops  |  "
+                f"{elapsed:.1f} s  |  Model: {model_tag}"
+            )
+
+        render_verdict(result, "video")
+
+        if result["label"] != "UNKNOWN":
+            render_chart(result["frame_scores"])
+            if settings["show_gradcam"]:
+                render_gradcam(result, model)
+            if settings["show_gallery"]:
+                render_gallery(result)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def main():
+    inject_css()
+    settings = sidebar()
+
+    st.markdown("<h1 style='margin-bottom:0'>🕵️ Deepfake Face Detection</h1>",
+                unsafe_allow_html=True)
+    st.markdown(
+        "<p style='color:#888;margin-top:0'>"
+        "Upload an image or video to detect AI-manipulated faces.</p>",
+        unsafe_allow_html=True)
+    st.divider()
+
+    # Load CNN model (always needed)
+    try:
+        model = get_model()
+    except FileNotFoundError as e:
+        st.error(str(e))
+        st.stop()
+
+    # Pre-warm LSTM + extractor (failures handled gracefully in inference.py)
+    try:
+        get_cnn_extractor()
+        get_lstm_model()
+    except Exception:
+        pass
+
+    uploaded = st.file_uploader(
+        "Upload image or video",
+        type=["jpg", "jpeg", "png", "mp4", "avi", "mov", "mkv"],
+        label_visibility="collapsed",
     )
 
-    if uploaded_img:
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            image = Image.open(uploaded_img).convert("RGB")
-            st.image(image, caption="Uploaded Image", use_column_width=True)
+    if uploaded is None:
+        st.info("👆 Upload an image or video to get started.")
+        with st.expander("How it works"):
+            st.markdown("""
+1. **MTCNN** detects and crops the face from each frame.
+2. **EfficientNetB4** extracts deep features from the face crop.
+3. For **images** — a Dense head outputs the fake probability directly.
+4. For **videos** — frame features are passed as a sequence into a **BiLSTM**,
+   which analyses temporal inconsistencies across frames before giving a verdict.
+5. **Grad-CAM** highlights the regions that drove the CNN decision.
+6. Per-frame CNN scores are shown in the bar chart for full transparency.
+            """)
+        return
 
-        with col2:
-            if st.button("🔍 Analyze Image", key="btn_img"):
-                with st.spinner("Loading model…"):
-                    cnn_model, lstm_model = load_models()
-                with st.spinner("Detecting deepfake…"):
-                    img_arr = np.array(image)
-                    time.sleep(0.3)  # small UX pause
-                    prob, label = predict_image(cnn_model, img_arr)
+    if uploaded.name.lower().endswith((".jpg", ".jpeg", ".png")):
+        run_image(uploaded, model, settings)
+    elif uploaded.name.lower().endswith((".mp4", ".avi", ".mov", ".mkv")):
+        run_video(uploaded, model, settings)
+    else:
+        st.error("Unsupported file type.")
 
-                    # Apply user threshold
-                    if prob >= threshold:
-                        label = "FAKE"
-                    else:
-                        label = "REAL"
 
-                is_fake = label == "FAKE"
-                css_cls = "result-fake" if is_fake else "result-real"
-                emoji   = "⚠️" if is_fake else "✅"
-                conf    = prob if is_fake else 1 - prob
-
-                st.markdown(f"""
-                <div class="{css_cls}">
-                    <div class="result-label">{emoji} {label}</div>
-                    <div class="confidence-text">Confidence: <strong>{conf*100:.1f}%</strong></div>
-                    <br>
-                    <span class="model-badge">EfficientNet B0 CNN</span>
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("**Raw fake probability:**")
-                st.progress(min(prob, 1.0))
-                st.caption(f"{prob*100:.2f}% probability of being a deepfake")
-
-                if is_fake:
-                    st.markdown("""
-                    <div class="info-box">
-                        ⚠️ This image shows signs of AI-generated or manipulated facial content.
-                        Typical artifacts include unnatural skin texture, eye asymmetry, or blurred edges.
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown("""
-                    <div class="info-box">
-                        ✅ No significant deepfake artifacts were detected. The image appears authentic.
-                    </div>
-                    """, unsafe_allow_html=True)
-
-# ════════════════════ VIDEO TAB ═══════════════════════════════════════════════
-with tab_vid:
-    st.markdown("#### Upload a video to check for temporal deepfake patterns")
-    uploaded_vid = st.file_uploader(
-        "Choose video", type=["mp4","avi","mov","mkv"],
-        key="vid_upload", label_visibility="collapsed"
-    )
-
-    if uploaded_vid:
-        st.video(uploaded_vid)
-
-        if st.button("🔍 Analyze Video (CNN + LSTM)", key="btn_vid"):
-            with st.spinner("Loading models…"):
-                cnn_model, lstm_model = load_models()
-
-            progress_bar = st.progress(0, text="Extracting frames…")
-
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-                tmp.write(uploaded_vid.read())
-                tmp_path = tmp.name
-
-            progress_bar.progress(20, text="Running CNN feature extraction…")
-            time.sleep(0.2)
-
-            try:
-                prob, label, frames_bgr = predict_video(
-                    cnn_model, lstm_model, tmp_path,
-                    n_frames=n_frames
-                )
-            finally:
-                os.unlink(tmp_path)
-
-            progress_bar.progress(80, text="Running BiLSTM temporal analysis…")
-            time.sleep(0.2)
-            progress_bar.progress(100, text="Done!")
-
-            # Apply user threshold
-            label = "FAKE" if prob >= threshold else "REAL"
-
-            is_fake = label == "FAKE"
-            css_cls = "result-fake" if is_fake else "result-real"
-            emoji   = "⚠️" if is_fake else "✅"
-            conf    = prob if is_fake else 1 - prob
-
-            st.markdown(f"""
-            <div class="{css_cls}">
-                <div class="result-label">{emoji} {label}</div>
-                <div class="confidence-text">Confidence: <strong>{conf*100:.1f}%</strong></div>
-                <br>
-                <span class="model-badge">EfficientNet B0 + BiLSTM</span>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("**Raw fake probability across sequence:**")
-            st.progress(min(prob, 1.0))
-            st.caption(f"{prob*100:.2f}% probability of being a deepfake video")
-
-            # Show sampled frames
-            if frames_bgr:
-                st.markdown("#### 📽️ Sampled Frames Used for Analysis")
-                display_frames = frames_bgr[:min(8, len(frames_bgr))]
-                cols = st.columns(len(display_frames))
-                for idx, (col, fr) in enumerate(zip(cols, display_frames)):
-                    rgb = cv2.cvtColor(fr, cv2.COLOR_BGR2RGB)
-                    col.image(rgb, caption=f"Frame {idx+1}", use_column_width=True)
-
-            if is_fake:
-                st.markdown("""
-                <div class="info-box">
-                    ⚠️ The temporal analysis of facial movements across frames reveals
-                    inconsistencies consistent with AI-generated deepfake content.
-                    The BiLSTM model detected unnatural motion patterns or feature drift.
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                <div class="info-box">
-                    ✅ The temporal sequence of facial features appears natural and consistent.
-                    No deepfake artifacts were detected across the analyzed frames.
-                </div>
-                """, unsafe_allow_html=True)
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-# ─── Footer ───────────────────────────────────────────────────────────────────
-st.markdown("---")
-st.markdown("""
-<div style="text-align:center; color:#64748b; font-size:0.85rem; padding:1rem 0;">
-    DeepFake Detector · EfficientNet B0 + BiLSTM · For educational & research use only
-</div>
-""", unsafe_allow_html=True)
+if __name__ == "__main__":
+    main()
